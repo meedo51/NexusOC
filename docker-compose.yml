@@ -1,28 +1,12 @@
 services:
-  caddy:
-    build:
-      context: ./caddy
-      dockerfile: Dockerfile
-    container_name: nexusoc-caddy
-    restart: unless-stopped
-    ports:
-      - "4443:443"
-    volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - frontend
-      - backend
-    networks:
-      - nexusoc-net
-
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: nexusoc-frontend
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=https://ai.xus.me/api
       - NEXT_PUBLIC_WS_URL=wss://ai.xus.me/api/ws
@@ -37,8 +21,8 @@ services:
       dockerfile: Dockerfile
     container_name: nexusoc-backend
     restart: unless-stopped
-    expose:
-      - "8000"
+    ports:
+      - "127.0.0.1:8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://nexusoc:${DB_PASSWORD}@db:5432/nexusoc
       - REDIS_URL=redis://redis:6379/0
@@ -92,8 +76,6 @@ volumes:
   postgres_data:
   redis_data:
   backend_data:
-  caddy_data:
-  caddy_config:
 
 networks:
   nexusoc-net:

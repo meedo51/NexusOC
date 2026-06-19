@@ -3,21 +3,19 @@ set -euo pipefail
 
 # ─── NexusOC — Uninstall Script ──────────────────────────────────────────
 # Completely removes NexusOC: containers, images, volumes, firewall rules,
-# SELinux context, and project data.
+# SELinux context, nginx config, and project data.
 #
 # Usage: sudo bash uninstall.sh
 #
 # Flags:
-#   --purge-all    Also remove Docker Engine and system packages
-#   --keep-data    Preserve Docker volumes (database, files, caddy certs)
+#   --purge-all    Also remove Docker Engine, nginx, and system packages
+#   --keep-data    Preserve Docker volumes (database, uploaded files)
 
 DOMAIN="ai.xus.me"
-PORT="4443"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --domain) DOMAIN="$2"; shift 2 ;;
-        --port)   PORT="$2";   shift 2 ;;
         *) shift ;;
     esac
 done
@@ -72,7 +70,7 @@ if command -v docker &>/dev/null && [[ -f "$COMPOSE_FILE" ]]; then
     docker compose down --remove-orphans 2>/dev/null || true
 else
     # Remove containers individually if compose file is missing
-    for container in nexusoc-caddy nexusoc-frontend nexusoc-backend nexusoc-db nexusoc-redis; do
+    for container in nexusoc-frontend nexusoc-backend nexusoc-db nexusoc-redis; do
         if docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
             docker rm -f "$container" 2>/dev/null || true
             log "Removed container: $container"
@@ -87,14 +85,14 @@ step "Removing Docker volumes"
 if [[ "$KEEP_DATA" == "true" ]]; then
     warn "Skipping volume removal (--keep-data flag set)"
 else
-    for volume in nexusoc_postgres_data nexusoc_redis_data nexusoc_backend_data nexusoc_caddy_data nexusoc_caddy_config; do
+    for volume in nexusoc_postgres_data nexusoc_redis_data nexusoc_backend_data; do
         if docker volume ls -q | grep -q "^${volume}$"; then
             docker volume rm "$volume" 2>/dev/null || true
             log "Removed volume: $volume"
         fi
     done
     # Also try project-prefixed variants
-    for volume in postgres_data redis_data backend_data caddy_data caddy_config; do
+    for volume in postgres_data redis_data backend_data; do
         if docker volume ls -q | grep -q "^${volume}$"; then
             docker volume rm "$volume" 2>/dev/null || true
             log "Removed volume: $volume"
@@ -131,7 +129,7 @@ fi
 step "Removing firewall rules"
 
 if systemctl is-active --quiet firewalld 2>/dev/null; then
-    for fw_port in "${PORT}" 80 443; do
+    for fw_port in 80 443; do
         if firewall-cmd --zone=public --query-port="${fw_port}/tcp" &>/dev/null; then
             firewall-cmd --zone=public --remove-port="${fw_port}/tcp" --permanent &>/dev/null || true
             log "Removed firewall rule: port ${fw_port}/tcp"
@@ -148,7 +146,7 @@ fi
 step "Removing SELinux file contexts"
 
 if command -v selinuxenabled &>/dev/null && selinuxenabled; then
-    for dir in caddy backend frontend; do
+    for dir in backend frontend; do
         if [[ -d "$dir" ]]; then
             restorecon -RF "$dir" 2>/dev/null || true
             log "Restored default SELinux context: $dir/"
@@ -158,14 +156,25 @@ else
     info "SELinux is not enforcing — skipping context restore"
 fi
 
-# ─── 7. Remove local directories ────────────────────────────────────────
+# ─── 7. Remove nginx config ─────────────────────────────────────────────
+
+step "Removing nginx configuration"
+
+NGINX_CONF="/etc/nginx/conf.d/${DOMAIN}.conf"
+if [[ -f "$NGINX_CONF" ]]; then
+    rm -f "$NGINX_CONF"
+    log "Removed nginx config: $NGINX_CONF"
+    nginx -t &>/dev/null && systemctl reload nginx 2>/dev/null && log "nginx reloaded" || true
+fi
+
+# ─── 8. Remove local directories ────────────────────────────────────────
 
 step "Removing local data directories"
 
 if [[ "$KEEP_DATA" == "true" ]]; then
     warn "Skipping local directory removal (--keep-data flag set)"
 else
-    for dir in caddy_data backend_data; do
+    for dir in backend_data; do
         if [[ -d "$dir" ]]; then
             rm -rf "$dir" 2>/dev/null || true
             log "Removed directory: $dir/"
@@ -173,7 +182,7 @@ else
     done
 fi
 
-# ─── 8. Optionally purge Docker Engine ───────────────────────────────────
+# ─── 9. Optionally purge Docker Engine ───────────────────────────────────
 
 if [[ "$PURGE_ALL" == "true" ]]; then
     step "Purging Docker Engine and system packages"
@@ -193,7 +202,7 @@ if [[ "$PURGE_ALL" == "true" ]]; then
     log "Build dependencies removed"
 fi
 
-# ─── 9. Final summary ───────────────────────────────────────────────────
+# ─── 10. Final summary ──────────────────────────────────────────────────
 
 echo
 echo -e "${GREEN}╔══════════════════════════════════════════════════════╗${NC}"
