@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   title: "NexusOC — AI Code Assistant",
   description: "Next-generation AI-powered code assistant with workspace management",
   icons: {
-    icon: "/favicon.ico",
+    icon: "/favicon.svg",
   },
 };
 
