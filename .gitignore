@@ -1,0 +1,16 @@
+node_modules/
+.next/
+.env
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+.venv/
+*.log
+.DS_Store
+caddy_data/
+caddy_config/
+backend_data/
+postgres_data/
+redis_data/
